@@ -2,29 +2,27 @@ const express = require("express");
 
 const {
     createBooking,
-    getBookings,
-    getMyBookings,
-    deleteBooking,
-    updateBookingStatus,
+    getUserBookings,
+    getAllBookings,
+    getBookingById,
+    cancelBooking,
+    updateBookingStatus
 } = require("../controllers/bookingController");
 
 const { protect, admin } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// Create booking (user)
+
+// ================= USER ROUTES =================
 router.post("/", protect, createBooking);
+router.get("/my", protect, getUserBookings);
+router.get("/:id", protect, getBookingById);
+router.put("/:id/cancel", protect, cancelBooking);
 
-// Get my bookings (user)
-router.get("/my", protect, getMyBookings);
 
-// Admin: list all bookings
-router.get("/", protect, admin, getBookings);
-
-// Admin: update booking status
+// ================= ADMIN ROUTES =================
+router.get("/", protect, admin, getAllBookings);
 router.put("/:id/status", protect, admin, updateBookingStatus);
-
-// Delete booking (owner or admin)
-router.delete("/:id", protect, deleteBooking);
 
 module.exports = router;
