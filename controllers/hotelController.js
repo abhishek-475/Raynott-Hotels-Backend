@@ -15,24 +15,62 @@ exports.createHotel = async (req, res) => {
 // ================= GET HOTELS =================
 exports.getHotels = async (req, res) => {
     try {
-        const { city, country, stars } = req.query;
+        const {
+            city,
+            country,
+            stars,
+            search,
+            page = 1,
+            limit = 9,
+            sort = "newest"
+        } = req.query;
 
         const filter = {};
 
-        if (city) filter.city = city;
-        if (country) filter.country = country;
-        if (stars) filter.stars = Number(stars);
+        // Global search (name, city, country)
+        if (search) {
+            filter.$or = [
+                { name: { $regex: search, $options: "i" } },
+                { city: { $regex: search, $options: "i" } },
+                { country: { $regex: search, $options: "i" } }
+            ];
+        }
+
+        // Filters
+        if (city) filter.city = { $regex: city, $options: "i" };
+        if (country) filter.country = { $regex: country, $options: "i" };
+
+        if (stars && !isNaN(stars)) {
+            filter.stars = Number(stars);
+        }
+
+        // Sorting
+        let sortOption = {};
+        if (sort === "stars") sortOption.stars = -1;
+        else if (sort === "stars-low") sortOption.stars = 1;
+        else sortOption.createdAt = -1;
+
+        const skip = (page - 1) * limit;
 
         const hotels = await Hotel.find(filter)
-            .populate('rooms');
+            .sort(sortOption)
+            .skip(skip)
+            .limit(Number(limit))
+            .populate("rooms", "name price maxGuests images");
 
-        res.json(hotels);
+        const total = await Hotel.countDocuments(filter);
+
+        res.json({
+            hotels,
+            total,
+            page: Number(page),
+            pages: Math.ceil(total / limit)
+        });
 
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
 };
-
 
 // ================= GET HOTEL BY ID =================
 exports.getHotelById = async (req, res) => {
