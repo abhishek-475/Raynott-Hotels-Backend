@@ -25,50 +25,70 @@ exports.getHotels = async (req, res) => {
             sort = "newest"
         } = req.query;
 
+        const pageNum = Math.max(Number(page), 1);
+        const limitNum = Math.min(Number(limit), 50);
+
         const filter = {};
 
-        // Global search (name, city, country)
+        // Search
         if (search) {
+            const regex = new RegExp(search, "i");
+
             filter.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { city: { $regex: search, $options: "i" } },
-                { country: { $regex: search, $options: "i" } }
+                { name: regex },
+                { city: regex },
+                { country: regex }
             ];
         }
 
         // Filters
-        if (city) filter.city = { $regex: city, $options: "i" };
-        if (country) filter.country = { $regex: country, $options: "i" };
+        if (city) {
+            filter.city = new RegExp(city, "i");
+        }
+
+        if (country) {
+            filter.country = new RegExp(country, "i");
+        }
 
         if (stars && !isNaN(stars)) {
             filter.stars = Number(stars);
         }
 
         // Sorting
-        let sortOption = {};
-        if (sort === "stars") sortOption.stars = -1;
-        else if (sort === "stars-low") sortOption.stars = 1;
-        else sortOption.createdAt = -1;
+        const sortOption = {
+            newest: { createdAt: -1 },
+            stars: { stars: -1 },
+            "stars-low": { stars: 1 }
+        }[sort] || { createdAt: -1 };
 
-        const skip = (page - 1) * limit;
+        // Execute in parallel
+        const [hotels, total] = await Promise.all([
+            Hotel.find(filter)
+                .sort(sortOption)
+                .skip((pageNum - 1) * limitNum)
+                .limit(limitNum)
+                .select("-__v")
+                .populate({
+                    path: "rooms",
+                    select: "name price maxGuests images",
+                    options: { lean: true }
+                })
+                .lean(),
 
-        const hotels = await Hotel.find(filter)
-            .sort(sortOption)
-            .skip(skip)
-            .limit(Number(limit))
-            .populate("rooms", "name price maxGuests images");
+            Hotel.countDocuments(filter)
+        ]);
 
-        const total = await Hotel.countDocuments(filter);
-
-        res.json({
+        return res.json({
             hotels,
             total,
-            page: Number(page),
-            pages: Math.ceil(total / limit)
+            page: pageNum,
+            pages: Math.ceil(total / limitNum)
         });
 
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        return res.status(500).json({
+            message: err.message
+        });
     }
 };
 
